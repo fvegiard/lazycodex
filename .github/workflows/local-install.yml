@@ -55,19 +55,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Codex help failed" }
           codex --invalid-installation-test-option
           if ($LASTEXITCODE -eq 0) { throw "Codex accepted an invalid option" }
-          $manifests = Get-ChildItem "$HOME/.codex/plugins/cache/sisyphuslabs" -Recurse -Force -Filter plugin.json |
-            Where-Object { $_.Directory.Name -eq '.codex-plugin' }
-          if (-not $manifests) { throw "LazyCodex payload missing" }
-          foreach ($file in $manifests) {
-            $plugin = Get-Content $file.FullName -Raw | ConvertFrom-Json
-            if ($plugin.name -ne 'omo') { throw "Unexpected plugin" }
-            "LazyCodex $($plugin.version)"
-            $root = $file.Directory.Parent.FullName
-            $catalog = Get-Content (Join-Path $root 'model-catalog.json') -Raw | ConvertFrom-Json
-            if ($catalog.current.model -ne 'gpt-6-astra') { throw "GPT-6 default missing" }
-            if (-not (Test-Path (Join-Path $root $plugin.skills))) { throw "Skills missing" }
-            foreach ($hook in $plugin.hooks) {
-              Get-Content (Join-Path $root $hook) -Raw | ConvertFrom-Json | Out-Null
-            }
+          $root = "$HOME/.codex/plugins/cache/sisyphuslabs/omo/5.0.0-beta.60"
+          $plugin = Get-Content "$root/.codex-plugin/plugin.json" -Raw | ConvertFrom-Json
+          if ($plugin.name -ne 'omo' -or $plugin.version -ne '5.0.0-beta.60') { throw "Unexpected plugin" }
+          "LazyCodex $($plugin.version)"
+          $catalog = Get-Content "$root/model-catalog.json" -Raw | ConvertFrom-Json
+          if ($catalog.current.model -ne 'gpt-6-astra') { throw "GPT-6 default missing" }
+          if (-not (Test-Path (Join-Path $root $plugin.skills))) { throw "Skills missing" }
+          foreach ($hook in $plugin.hooks) {
+            Get-Content (Join-Path $root $hook) -Raw | ConvertFrom-Json | Out-Null
           }
           $global:LASTEXITCODE = 0
