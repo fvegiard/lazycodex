@@ -1,0 +1,71 @@
+name: Official local installation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [francis-config]
+    paths:
+      - .github/workflows/local-install.yml
+  pull_request:
+    paths:
+      - .github/workflows/local-install.yml
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      CODEX_INSTALLER_USE_RELEASES_OPENAI_COM: "false"
+      CODEX_NON_INTERACTIVE: "true"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - name: Install official Codex on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          curl -fsSL https://chatgpt.com/codex/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Install official Codex on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          irm https://chatgpt.com/codex/install.ps1 | iex
+          "$env:LOCALAPPDATA\Programs\OpenAI\Codex\bin" >> $env:GITHUB_PATH
+      - name: Run the regular LazyCodex installer
+        shell: pwsh
+        run: |
+          npx --yes lazycodex-ai install --no-tui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify installed CLI and LazyCodex payload
+        shell: pwsh
+        run: |
+          codex --version
+          if ($LASTEXITCODE -ne 0) { throw "Codex version failed" }
+          codex --help
+          if ($LASTEXITCODE -ne 0) { throw "Codex help failed" }
+          codex --invalid-installation-test-option
+          if ($LASTEXITCODE -eq 0) { throw "Codex accepted an invalid option" }
+          $manifests = Get-ChildItem "$HOME/.codex/plugins/cache/sisyphuslabs" -Recurse -Filter plugin.json |
+            Where-Object { $_.Directory.Name -eq '.codex-plugin' }
+          if (-not $manifests) { throw "LazyCodex payload missing" }
+          foreach ($file in $manifests) {
+            $plugin = Get-Content $file.FullName -Raw | ConvertFrom-Json
+            if ($plugin.name -ne 'omo') { continue }
+            "LazyCodex $($plugin.version)"
+            $root = $file.Directory.Parent.FullName
+            if (-not (Test-Path (Join-Path $root $plugin.skills))) { throw "Skills missing" }
+            foreach ($hook in $plugin.hooks) {
+              Get-Content (Join-Path $root $hook) -Raw | ConvertFrom-Json | Out-Null
+            }
+          }
+          $global:LASTEXITCODE = 0
